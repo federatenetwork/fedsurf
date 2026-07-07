@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Chrome UI webview talks to the core (navigation commands + url events).",
+  "windows": ["main"],
+  "webviews": ["chrome", "content"],
+  "permissions": ["core:default"]
+}

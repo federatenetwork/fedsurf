@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fedsurf</title>
+<style>
+  @font-face {
+    font-family: 'Averia Serif Libre';
+    font-style: normal; font-weight: 400; font-display: swap;
+    src: url('fonts/averia-serif-libre-400.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Averia Serif Libre';
+    font-style: italic; font-weight: 400; font-display: swap;
+    src: url('fonts/averia-serif-libre-400-italic.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Averia Serif Libre';
+    font-style: normal; font-weight: 700; font-display: swap;
+    src: url('fonts/averia-serif-libre-700.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Lilex';
+    font-style: normal; font-weight: 100 700; font-display: swap;
+    src: url('fonts/lilex-var.woff2') format('woff2');
+  }
+  :root {
+    /* Federate Network palette (primitives, from home.fed) */
+    --cream: #FBF6F0;
+    --sand: #E8DEC5;
+    --bronze: #AE7A48;
+    --umber: #544329;
+    --ink-soft: #2D3030;
+    --ink: #21211F;
+    --ink-deep: #19191A;
+    --amber: #C58A24;
+    --terracotta: #C86439;
+    --navy: #183F68;
+    --teal: #406A66;
+    --olive: #6E7A56;
+    /* semantic */
+    --surface: var(--cream);
+    --control-bg: color-mix(in srgb, var(--sand) 42%, var(--cream));
+    --control-bg-hover: color-mix(in srgb, var(--sand) 75%, var(--cream));
+    --border-subtle: var(--sand);
+    --text: var(--ink);
+    --text-muted: var(--umber);
+    --accent: var(--bronze);
+    --scheme-fed: var(--teal);
+    --scheme-https: var(--umber);
+    --scheme-http: var(--amber);
+    --font-ui: 'Averia Serif Libre', Georgia, serif;
+    --font-mono: 'Lilex', ui-monospace, Menlo, monospace;
+  }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(174, 122, 72, 0.55);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    min-height: 40px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(174, 122, 72, 0.85); background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:active { background: var(--umber); background-clip: padding-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  body {
+    background: var(--surface);
+    color: var(--text);
+    font: 13px/1 var(--font-ui);
+    user-select: none;
+  }
+  .toolbar {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    /* left padding clears the macOS traffic lights (overlay title bar) */
+    padding: 0 10px 0 84px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .icon-btn {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    flex: none;
+    border: 0; border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+  }
+  .icon-btn:hover { background: var(--control-bg-hover); color: var(--ink); }
+  .icon-btn:active { background: var(--sand); }
+  .icon-btn:focus-visible, .address:focus-within {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  .icon-btn svg { width: 17px; height: 17px; display: block; }
+  .address {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 13px;
+    border-radius: 9px;
+    background: var(--control-bg);
+    transition: background-color 120ms ease-out;
+  }
+  .address:focus-within { background: #fff; }
+  .scheme {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font: 600 10px/1 var(--font-mono);
+    letter-spacing: 0.07em;
+  }
+  .scheme svg { width: 13px; height: 13px; display: block; }
+  .scheme[data-kind="fed"]   { color: var(--scheme-fed); }
+  .scheme[data-kind="https"] { color: var(--scheme-https); }
+  .scheme[data-kind="http"]  { color: var(--scheme-http); }
+  .scheme[data-kind="none"]  { display: none; }
+  #url {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: 440 13px/1 var(--font-mono);
+    user-select: text;
+  }
+  #url:focus { outline: none; }
+  #url::placeholder {
+    color: var(--text-muted);
+    font: italic 400 13px/1 var(--font-ui);
+    opacity: 0.8;
+  }
+  .progress {
+    position: fixed;
+    left: 0; bottom: 0;
+    height: 2px; width: 100%;
+    background: transparent;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .progress::after {
+    content: "";
+    display: block;
+    height: 100%; width: 30%;
+    background: var(--accent);
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  .progress[data-loading="true"]::after {
+    opacity: 1;
+    animation: slide 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  @keyframes slide {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(433%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .progress[data-loading="true"]::after { animation: none; transform: none; width: 100%; opacity: 0.4; }
+    .icon-btn, .address { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar" data-tauri-drag-region>
+  <!-- Tabler Icons (outline), MIT — https://tabler.io/icons -->
+  <button id="back" class="icon-btn" aria-label="Go back" title="Back">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l14 0"/><path d="M5 12l6 6"/><path d="M5 12l6 -6"/></svg>
+  </button>
+  <button id="forward" class="icon-btn" aria-label="Go forward" title="Forward">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l14 0"/><path d="M13 18l6 -6"/><path d="M13 6l6 6"/></svg>
+  </button>
+  <button id="reload" class="icon-btn" aria-label="Reload page" title="Reload">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/></svg>
+  </button>
+  <button id="home" class="icon-btn" aria-label="Go to home.fed" title="Home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l-2 0l9 -9l9 9l-2 0"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"/><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/></svg>
+  </button>
+  <div class="address">
+    <span id="scheme" class="scheme" data-kind="none">
+      <svg id="scheme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></svg>
+      <span id="scheme-label"></span>
+    </span>
+    <input id="url" type="text" spellcheck="false" autocomplete="off"
+           placeholder="Search Federate, or enter a fed:// or https:// address"
+           aria-label="Address and search">
+  </div>
+</div>
+<div id="progress" class="progress" data-loading="false" role="progressbar" aria-label="Page loading"></div>
+
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+
+  const urlInput = document.getElementById('url');
+  const scheme = document.getElementById('scheme');
+  const schemeIcon = document.getElementById('scheme-icon');
+  const schemeLabel = document.getElementById('scheme-label');
+  const progress = document.getElementById('progress');
+
+  // Tabler Icons (outline): shield-check / lock / alert-triangle
+  const ICONS = {
+    fed: '<path d="M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06"/><path d="M15 19l2 2l4 -4"/>',
+    https: '<path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M8 11v-4a4 4 0 1 1 8 0v4"/>',
+    http: '<path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/><path d="M12 16h.01"/>'
+  };
+  const LABELS = { fed: 'FED · VERIFIED', https: 'HTTPS', http: 'HTTP · NOT SECURE' };
+
+  let currentUrl = '';
+
+  function setUrl(url) {
+    currentUrl = url;
+    if (document.activeElement !== urlInput) urlInput.value = url;
+    const kind = url.startsWith('fed://') ? 'fed'
+               : url.startsWith('https://') ? 'https'
+               : url.startsWith('http://') ? 'http' : 'none';
+    scheme.dataset.kind = kind;
+    if (kind !== 'none') {
+      schemeIcon.innerHTML = ICONS[kind];
+      schemeLabel.textContent = LABELS[kind];
+    }
+  }
+
+  urlInput.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      const input = urlInput.value.trim();
+      if (!input) return;
+      try {
+        const url = await invoke('navigate', { input });
+        setUrl(url);
+        urlInput.blur();
+      } catch (err) {
+        console.error('navigate failed:', err);
+      }
+    } else if (e.key === 'Escape') {
+      urlInput.value = currentUrl;
+      urlInput.blur();
+    }
+  });
+  urlInput.addEventListener('focus', () => urlInput.select());
+
+  document.getElementById('back').addEventListener('click', () => invoke('go_back'));
+  document.getElementById('forward').addEventListener('click', () => invoke('go_forward'));
+  document.getElementById('reload').addEventListener('click', () => invoke('reload'));
+  document.getElementById('home').addEventListener('click', async () => {
+    setUrl(await invoke('go_home'));
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'l') {
+      e.preventDefault();
+      urlInput.focus();
+    }
+  });
+
+  listen('fedsurf://navigation-started', (e) => {
+    progress.dataset.loading = 'true';
+    setUrl(e.payload);
+  });
+  listen('fedsurf://url-changed', (e) => {
+    progress.dataset.loading = 'false';
+    setUrl(e.payload);
+  });
+
+  setUrl('fed://home.fed');
+</script>
+</body>
+</html>

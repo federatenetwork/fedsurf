@@ -1,0 +1,26 @@
+[package]
+name = "fedsurf"
+version = "0.1.0"
+description = "Fedsurf — a browser for the Federate Network (fed:// + https:// + http://)"
+edition = "2021"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["unstable", "devtools"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = "0.3"
+
+federate-core = { path = "../../federatenetwork/crates/federate-core" }
+federate-naming = { path = "../../federatenetwork/crates/federate-naming" }
+federate-uri = { path = "../../federatenetwork/crates/federate-uri" }
+federate-client = { path = "../../federatenetwork/crates/federate-client" }
+federate-resolution = { path = "../../federatenetwork/crates/federate-resolution" }
+
+[profile.release]
+lto = true
+codegen-units = 1
