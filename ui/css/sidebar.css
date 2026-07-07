@@ -26,6 +26,11 @@ html.sidebar-resizing .sidebar { transition: none; }
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  /* The scroll container clips at its padding box; bleed into the sidebar's
+     8px padding so card borders/shadows and the rail's active indicator
+     (.tab::before at left:-8px) are never sliced off at the row edges. */
+  margin: -3px -8px;
+  padding: 3px 8px;
 }
 .tab-list[data-fade="top"] {
   mask-image: linear-gradient(180deg, transparent 0, #000 12px);
@@ -215,11 +220,13 @@ html.collapsed .tab-title {
 .tab-close:hover { background: var(--sand); color: var(--ink); }
 .tab-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* Collapsed: the close button sits over the favicon slot (right:8px == the
-   icon position in a 36px row) and swaps in after a 350ms hover intent delay,
-   so quick scans over the rail don't flash X's. */
-html.collapsed .tab:hover .tab-close { opacity: 1; transition-delay: 350ms; }
-html.collapsed .tab:hover .tab-icon { opacity: 0; transition-delay: 350ms; }
+/* Collapsed: the close button sits over the favicon slot and only swaps in
+   while ⌘ (macOS) / Ctrl is held (html.mod-down, tracked in sidebar.js), so
+   hovering the rail never flashes X's over favicons. */
+html.collapsed .tab:hover .tab-close { opacity: 0; }
+html.collapsed.mod-down .tab:hover .tab-close,
+html.collapsed .tab .tab-close:focus-visible { opacity: 1; }
+html.collapsed.mod-down .tab:hover .tab-icon { opacity: 0; }
 html.collapsed .tab-close {
   left: 50%;
   right: auto;

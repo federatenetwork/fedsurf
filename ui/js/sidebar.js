@@ -221,27 +221,46 @@ function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+/* The native content webview is laid out by Rust, so its width must follow
+   the CSS animation frame by frame — resizing it once to the final width
+   makes the page visibly jump (flick) while the sidebar is still sliding.
+   Calls are coalesced: at most one IPC round-trip in flight, always ending
+   on the latest value. */
+let pendingWidthPx = null;
+let widthRpc = Promise.resolve();
+
+function pushSidebarWidth(px) {
+  pendingWidthPx = px;
+  widthRpc = widthRpc.then(() => {
+    if (pendingWidthPx == null) return undefined;
+    const send = pendingWidthPx;
+    pendingWidthPx = null;
+    return invoke('set_sidebar_width', { px: send }).catch(() => {});
+  });
+}
+
 function animateSidebarWidth(fromPx, toPx) {
   const root = document.documentElement;
   if (prefersReducedMotion() || Math.abs(fromPx - toPx) < 1) {
     root.classList.remove('sidebar-resizing');
     root.style.removeProperty('--sidebar-w');
-    invoke('set_sidebar_width', { px: toPx });
+    pushSidebarWidth(toPx);
     return;
   }
 
   const start = performance.now();
-  invoke('set_sidebar_width', { px: toPx });
 
   const step = (now) => {
     const t = Math.min(1, (now - start) / SIDEBAR_ANIM_MS);
     const px = fromPx + (toPx - fromPx) * easeOutCubic(t);
     root.style.setProperty('--sidebar-w', `${px.toFixed(2)}px`);
+    pushSidebarWidth(px);
     if (t < 1) {
       sidebarAnim = requestAnimationFrame(step);
     } else {
       root.classList.remove('sidebar-resizing');
       root.style.removeProperty('--sidebar-w');
+      pushSidebarWidth(toPx);
     }
   };
 
@@ -286,6 +305,20 @@ export function init() {
   listEl.addEventListener('scroll', updateFade, { passive: true });
   listEl.addEventListener('keydown', onListKeydown);
   new ResizeObserver(updateFade).observe(listEl);
+
+  // Track ⌘/Ctrl for the collapsed rail: the close button only replaces the
+  // favicon while the modifier is held (html.mod-down, see sidebar.css).
+  const setMod = (down) => document.documentElement.classList.toggle('mod-down', down);
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Meta' || e.key === 'Control') setMod(true);
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'Meta' || e.key === 'Control') setMod(e.metaKey || e.ctrlKey);
+  });
+  window.addEventListener('blur', () => setMod(false));
+  // Keys can go down while another webview has focus — mouse events still
+  // carry live modifier state, so hovering the rail stays accurate.
+  listEl.addEventListener('mousemove', (e) => setMod(e.metaKey || e.ctrlKey), { passive: true });
 
   initReorder(listEl, (id, toIndex) => {
     const from = state.tabs.findIndex((t) => t.id === id);

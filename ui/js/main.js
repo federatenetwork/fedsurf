@@ -77,6 +77,7 @@ function rememberRecent(tab) {
   const item = {
     url: tab.url,
     title: tab.title || hostOf(tab.url) || tab.url,
+    favicon: tab.favicon || '',
     at: Date.now(),
   };
   const next = [
