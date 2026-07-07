@@ -13,7 +13,25 @@
       "csp": null
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["fed"]
+      }
+    }
+  },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": "all",
+    "shortDescription": "A browser for the Federate Network",
+    "longDescription": "Fedsurf browses fed://, https:// and http://. fed:// content is resolved in-process with every layer signature/hash verified before rendering.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
   }
 }

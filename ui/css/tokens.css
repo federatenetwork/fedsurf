@@ -1,0 +1,64 @@
+/* Federate Network palette (primitives, from home.fed) + semantic tokens. */
+
+@font-face {
+  font-family: 'Averia Serif Libre';
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../fonts/averia-serif-libre-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Averia Serif Libre';
+  font-style: italic; font-weight: 400; font-display: swap;
+  src: url('../fonts/averia-serif-libre-400-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Averia Serif Libre';
+  font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/averia-serif-libre-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Lilex';
+  font-style: normal; font-weight: 100 700; font-display: swap;
+  src: url('../fonts/lilex-var.woff2') format('woff2');
+}
+
+:root {
+  /* primitives */
+  --cream: #FBF6F0;
+  --sand: #E8DEC5;
+  --bronze: #AE7A48;
+  --umber: #544329;
+  --ink-soft: #2D3030;
+  --ink: #21211F;
+  --ink-deep: #19191A;
+  --amber: #C58A24;
+  --terracotta: #C86439;
+  --navy: #183F68;
+  --teal: #406A66;
+  --olive: #6E7A56;
+
+  /* semantic */
+  --surface: var(--cream);
+  --control-bg: color-mix(in srgb, var(--sand) 42%, var(--cream));
+  --control-bg-hover: color-mix(in srgb, var(--sand) 75%, var(--cream));
+  --border-subtle: var(--sand);
+  --text: var(--ink);
+  --text-muted: var(--umber);
+  --accent: var(--bronze);
+  --scheme-fed: var(--teal);
+  --scheme-https: var(--umber);
+  --scheme-http: var(--amber);
+  --font-ui: 'Averia Serif Libre', Georgia, serif;
+  --font-mono: 'Lilex', ui-monospace, Menlo, monospace;
+
+  /* layout */
+  --topbar-h: 52px;
+  --sidebar-w: 240px;
+  --sidebar-w-collapsed: 52px;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html.collapsed {
+  --sidebar-w: var(--sidebar-w-collapsed);
+}

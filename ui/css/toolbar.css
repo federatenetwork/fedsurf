@@ -1,0 +1,104 @@
+/* Top bar: nav buttons + address bar. 52px tall, macOS pads left for the
+   traffic lights (overlay title bar); other platforms get a normal inset. */
+
+.toolbar {
+  grid-area: topbar;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+body[data-platform="macos"] .toolbar { padding-left: 84px; }
+
+.icon-btn {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  flex: none;
+  border: 0; border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    transform 80ms ease-out;
+}
+.icon-btn:hover { background: var(--control-bg-hover); color: var(--ink); }
+.icon-btn:active { background: var(--sand); transform: scale(0.94); }
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.icon-btn svg { width: 17px; height: 17px; display: block; }
+
+/* Reload does exactly one graceful turn per click. */
+@keyframes reload-turn {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+#reload.spinning svg { animation: reload-turn 500ms cubic-bezier(0.3, 0, 0.2, 1); }
+
+.address {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border-radius: 9px;
+  background: var(--control-bg);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  transition:
+    background-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+}
+.address:focus-within {
+  background: #fff;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 2px 10px rgba(84, 67, 41, 0.08);
+}
+
+.scheme {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.07em;
+  transition: opacity 140ms ease-out;
+}
+.scheme svg { width: 13px; height: 13px; display: block; }
+.scheme[data-kind="fed"]   { color: var(--scheme-fed); }
+.scheme[data-kind="https"] { color: var(--scheme-https); }
+.scheme[data-kind="http"]  { color: var(--scheme-http); }
+.scheme[data-kind="none"]  { display: none; }
+.scheme.swapping { opacity: 0; }
+
+#url {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 440 13px/1 var(--font-mono);
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+#url:focus { outline: none; }
+#url::placeholder {
+  color: var(--text-muted);
+  font: italic 400 13px/1 var(--font-ui);
+  opacity: 0.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn, .address, .scheme { transition: none; }
+  .icon-btn:active { transform: none; }
+  #reload.spinning svg { animation: none; }
+}

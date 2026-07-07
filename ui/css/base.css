@@ -1,0 +1,73 @@
+/* Reset, shell grid, scrollbar, progress line. */
+
+* { margin: 0; box-sizing: border-box; }
+
+html, body { height: 100%; overflow: hidden; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(174, 122, 72, 0.55);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  min-height: 40px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(174, 122, 72, 0.85); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:active { background: var(--umber); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+body {
+  background: var(--surface);
+  color: var(--text);
+  font: 13px/1 var(--font-ui);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: var(--topbar-h) 1fr;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "sidebar content";
+}
+
+/* The content cell is covered by the native tab webview; it only shows for a
+   beat during sidebar animation, as plain chrome background. */
+.content-spacer { grid-area: content; background: var(--surface); }
+
+/* Page-loading line: pinned to the toolbar's bottom edge (chrome DOM sits
+   under the native tab webviews, so it must live inside the topbar zone). */
+.progress {
+  position: fixed;
+  left: 0; top: calc(var(--topbar-h) - 2px);
+  height: 2px; width: 100%;
+  background: transparent;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 10;
+}
+.progress::after {
+  content: "";
+  display: block;
+  height: 100%; width: 30%;
+  background: var(--accent);
+  transform: translateX(-100%);
+  opacity: 0;
+}
+.progress[data-loading="true"]::after {
+  opacity: 1;
+  animation: progress-slide 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes progress-slide {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(433%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress[data-loading="true"]::after { animation: none; transform: none; width: 100%; opacity: 0.4; }
+}
