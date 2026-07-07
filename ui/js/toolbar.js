@@ -9,6 +9,10 @@ const schemeEl = document.getElementById('scheme');
 const schemeIcon = document.getElementById('scheme-icon');
 const schemeLabel = document.getElementById('scheme-label');
 const progress = document.getElementById('progress');
+const backBtn = document.getElementById('back');
+const forwardBtn = document.getElementById('forward');
+const reloadBtn = document.getElementById('reload');
+const homeBtn = document.getElementById('home');
 
 // Tabler Icons (outline): shield-check / lock / alert-triangle
 const ICONS = {
@@ -71,6 +75,8 @@ export function render() {
   const tab = activeTab();
   setUrl(tab ? tab.url : '');
   progress.dataset.loading = String(Boolean(tab && tab.loading));
+  syncNavButton(backBtn, tab?.canBack);
+  syncNavButton(forwardBtn, tab?.canForward);
 }
 
 export function init() {
@@ -91,13 +97,37 @@ export function init() {
   });
   urlInput.addEventListener('focus', () => urlInput.select());
 
-  document.getElementById('back').addEventListener('click', () => invoke('go_back'));
-  document.getElementById('forward').addEventListener('click', () => invoke('go_forward'));
-  const reloadBtn = document.getElementById('reload');
+  backBtn.addEventListener('click', () => {
+    pulse(backBtn, 'nudge-left');
+    invoke('go_back');
+  });
+  forwardBtn.addEventListener('click', () => {
+    pulse(forwardBtn, 'nudge-right');
+    invoke('go_forward');
+  });
   reloadBtn.addEventListener('click', () => {
     reloadBtn.classList.add('spinning');
     invoke('reload');
   });
   reloadBtn.addEventListener('animationend', () => reloadBtn.classList.remove('spinning'));
-  document.getElementById('home').addEventListener('click', () => invoke('go_home'));
+  homeBtn.addEventListener('click', () => {
+    pulse(homeBtn, 'hop');
+    invoke('go_home');
+  });
+}
+
+function pulse(btn, cls) {
+  if (btn.disabled) return;
+  if (btn._pulseUntil && performance.now() < btn._pulseUntil) return;
+  btn._pulseUntil = performance.now() + 130;
+  btn.classList.remove(cls);
+  void btn.offsetWidth;
+  btn.classList.add(cls);
+  window.setTimeout(() => btn.classList.remove(cls), 220);
+}
+
+function syncNavButton(btn, canNavigate) {
+  const disabled = canNavigate === false;
+  btn.disabled = disabled;
+  btn.setAttribute('aria-disabled', String(disabled));
 }

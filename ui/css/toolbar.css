@@ -29,10 +29,32 @@ body[data-platform="macos"] .toolbar { padding-left: 84px; }
 }
 .icon-btn:hover { background: var(--control-bg-hover); color: var(--ink); }
 .icon-btn:active { background: var(--sand); transform: scale(0.94); }
+.icon-btn:disabled {
+  color: color-mix(in srgb, var(--ink-soft) 38%, transparent);
+  cursor: default;
+}
+.icon-btn:disabled:hover { background: transparent; color: color-mix(in srgb, var(--ink-soft) 38%, transparent); }
+.icon-btn:disabled:active { transform: none; }
 .icon-btn:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
 .icon-btn svg { width: 17px; height: 17px; display: block; }
+
+@keyframes nudge-left {
+  40% { transform: translateX(-2px); }
+  75% { transform: translateX(0.75px); }
+}
+@keyframes nudge-right {
+  40% { transform: translateX(2px); }
+  75% { transform: translateX(-0.75px); }
+}
+@keyframes home-hop {
+  35% { transform: translateY(-2px); }
+  72% { transform: translateY(0.75px); }
+}
+.icon-btn.nudge-left svg { animation: nudge-left 210ms var(--ease-out); }
+.icon-btn.nudge-right svg { animation: nudge-right 210ms var(--ease-out); }
+.icon-btn.hop svg { animation: home-hop 220ms var(--ease-out); }
 
 /* Reload does exactly one graceful turn per click. */
 @keyframes reload-turn {
@@ -100,5 +122,8 @@ body[data-platform="macos"] .toolbar { padding-left: 84px; }
 @media (prefers-reduced-motion: reduce) {
   .icon-btn, .address, .scheme { transition: none; }
   .icon-btn:active { transform: none; }
-  #reload.spinning svg { animation: none; }
+  #reload.spinning svg,
+  .icon-btn.nudge-left svg,
+  .icon-btn.nudge-right svg,
+  .icon-btn.hop svg { animation: none; }
 }

@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Tab</title>
+<link rel="stylesheet" href="css/tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  html,
+  body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    background: var(--surface);
+    color: var(--text);
+    font: 14px/1.4 var(--font-ui);
+  }
+  body {
+    display: grid;
+    place-items: start center;
+    padding: clamp(42px, 10vh, 96px) 28px 28px;
+    overflow-y: auto;
+  }
+  .newtab {
+    width: min(760px, 100%);
+  }
+  .brand {
+    margin-bottom: 22px;
+  }
+  .mark {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: var(--teal);
+    color: var(--cream);
+    font: 700 22px/1 var(--font-ui);
+    box-shadow: 0 8px 24px rgba(64, 106, 102, 0.18);
+  }
+  h1 {
+    margin: 14px 0 5px;
+    font: 700 34px/1.05 var(--font-ui);
+    letter-spacing: 0;
+  }
+  .sub {
+    margin: 0;
+    color: var(--text-muted);
+    font: italic 400 15px/1.35 var(--font-ui);
+  }
+  .search {
+    height: 54px;
+    display: grid;
+    grid-template-columns: 1fr 44px;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: color-mix(in srgb, #fff 72%, var(--control-bg));
+    box-shadow: 0 12px 36px rgba(84, 67, 41, 0.08);
+  }
+  .search:focus-within {
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border-subtle));
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
+      0 14px 38px rgba(84, 67, 41, 0.10);
+  }
+  input {
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0 15px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: 440 15px/1 var(--font-mono);
+  }
+  input:focus { outline: none; }
+  input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.78;
+    font: italic 400 15px/1 var(--font-ui);
+  }
+  button {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--cream);
+    cursor: pointer;
+    transition: transform 120ms var(--ease-out), background-color 120ms ease-out;
+  }
+  button:hover { background: var(--umber); }
+  button:active { transform: translateX(1px) scale(0.98); }
+  button svg {
+    width: 19px;
+    height: 19px;
+    display: block;
+  }
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 18px 0 36px;
+  }
+  .chip,
+  .recent {
+    color: inherit;
+    text-decoration: none;
+  }
+  .chip {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: color-mix(in srgb, #fff 55%, var(--surface));
+    color: var(--ink-soft);
+    font: 400 13px/1 var(--font-ui);
+  }
+  .chip:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+    background: #fff;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  h2 {
+    margin: 0;
+    font: 700 15px/1 var(--font-ui);
+  }
+  .hint {
+    color: var(--text-muted);
+    font: italic 400 12px/1 var(--font-ui);
+  }
+  .recent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px;
+  }
+  .recent {
+    min-height: 76px;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: color-mix(in srgb, #fff 58%, var(--surface));
+  }
+  .recent:hover {
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+    background: #fff;
+  }
+  .recent-icon {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--teal);
+    color: var(--cream);
+    font: 700 14px/1 var(--font-ui);
+    text-transform: uppercase;
+  }
+  .recent-title,
+  .recent-url {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .recent-title {
+    font: 700 13px/1.2 var(--font-ui);
+  }
+  .recent-url {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font: 440 11px/1.2 var(--font-mono);
+  }
+  .empty {
+    min-height: 76px;
+    display: grid;
+    place-items: center start;
+    padding: 14px 16px;
+    border: 1px dashed var(--border-subtle);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font: italic 400 13px/1.35 var(--font-ui);
+  }
+  @media (max-width: 560px) {
+    body { padding-inline: 18px; }
+    h1 { font-size: 28px; }
+    .search { grid-template-columns: 1fr 40px; height: 50px; }
+    button { width: 38px; height: 38px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+    button:active { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main class="newtab">
+  <section class="brand" aria-labelledby="title">
+    <div class="mark" aria-hidden="true">*</div>
+    <h1 id="title">New Tab</h1>
+    <p class="sub">Search Federate, open a site, or jump back into recent pages.</p>
+  </section>
+
+  <form class="search" id="search">
+    <input id="q" type="text" spellcheck="false" autocomplete="off"
+           placeholder="Search, or enter a fed:// or https:// address"
+           aria-label="Search or address">
+    <button type="submit" aria-label="Go">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M5 12h14"></path>
+        <path d="M13 6l6 6l-6 6"></path>
+      </svg>
+    </button>
+  </form>
+
+  <nav class="quick" aria-label="Quick links">
+    <a class="chip" href="fed://home.fed"><span class="dot"></span>Home</a>
+    <a class="chip" href="fed://fed.busca"><span class="dot"></span>Federate Search</a>
+    <a class="chip" href="https://google.com"><span class="dot"></span>Google</a>
+  </nav>
+
+  <section aria-labelledby="recent-title">
+    <div class="section-head">
+      <h2 id="recent-title">Recent</h2>
+      <span class="hint" id="recent-count"></span>
+    </div>
+    <div class="recent-grid" id="recent"></div>
+  </section>
+</main>
+
+<script>
+const RECENT_KEY = 'fedsurf.recent';
+const input = document.getElementById('q');
+const recentEl = document.getElementById('recent');
+const countEl = document.getElementById('recent-count');
+
+function destination(value) {
+  const text = value.trim();
+  if (!text) return '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return text;
+  const head = text.split(/[/?#]/, 1)[0];
+  if (head.includes('.') && !/\s/.test(head)) return `https://${text}`;
+  return `fed://fed.busca/?q=${encodeURIComponent(text).replace(/%20/g, '+')}`;
+}
+
+function hostOf(url) {
+  try { return new URL(url).host; } catch (_) { return ''; }
+}
+
+function letterFor(item) {
+  return (hostOf(item.url) || item.title || '?').slice(0, 1);
+}
+
+function displayUrl(url) {
+  return url.replace(/^https?:\/\//, '');
+}
+
+function readRecent() {
+  try {
+    const items = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(items) ? items.filter((x) => x && x.url).slice(0, 8) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function renderRecent() {
+  const recent = readRecent();
+  countEl.textContent = recent.length ? `${recent.length} pages` : '';
+  recentEl.textContent = '';
+  if (!recent.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'Recent pages will appear here after you browse.';
+    recentEl.append(empty);
+    return;
+  }
+  for (const item of recent) {
+    const a = document.createElement('a');
+    a.className = 'recent';
+    a.href = item.url;
+    const icon = document.createElement('span');
+    icon.className = 'recent-icon';
+    icon.textContent = letterFor(item);
+    const body = document.createElement('span');
+    const title = document.createElement('span');
+    title.className = 'recent-title';
+    title.textContent = item.title || hostOf(item.url) || item.url;
+    const url = document.createElement('span');
+    url.className = 'recent-url';
+    url.textContent = displayUrl(item.url);
+    body.append(title, url);
+    a.append(icon, body);
+    recentEl.append(a);
+  }
+}
+
+document.getElementById('search').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const target = destination(input.value);
+  if (target) window.location.href = target;
+});
+
+renderRecent();
+</script>
+</body>
+</html>

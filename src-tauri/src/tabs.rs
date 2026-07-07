@@ -7,6 +7,7 @@ use crate::fed_protocol::canonical_fed_url;
 use crate::AppState;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::time::Duration;
 use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
@@ -14,6 +15,8 @@ pub const TOPBAR_HEIGHT: f64 = 52.0;
 pub const HOME_URL: &str = "fed://home.fed";
 pub const SEARCH_URL: &str = "fed://fed.busca";
 const DEFAULT_SIDEBAR_PX: f64 = 240.0;
+const NEW_TAB_PAGE: &str = "new-tab.html";
+const LOADING_FALLBACK_SECS: u64 = 12;
 
 pub type TabId = u32;
 
@@ -23,6 +26,10 @@ pub struct TabMeta {
     pub title: String,
     pub favicon: String,
     pub loading: bool,
+    #[serde(rename = "canBack", skip_serializing_if = "Option::is_none")]
+    pub can_back: Option<bool>,
+    #[serde(rename = "canForward", skip_serializing_if = "Option::is_none")]
+    pub can_forward: Option<bool>,
 }
 
 #[derive(Clone, Serialize)]
@@ -80,7 +87,8 @@ where
         let _ = tx.send(f(&handle));
     })
     .map_err(|e| e.to_string())?;
-    rx.await.map_err(|_| "main thread task dropped".to_string())?
+    rx.await
+        .map_err(|_| "main thread task dropped".to_string())?
 }
 
 // ---------------------------------------------------------------------------
@@ -92,8 +100,13 @@ pub fn create_tab_sync(
     url: Option<String>,
     activate: bool,
 ) -> Result<TabId, String> {
-    let url_str = canonical_fed_url(&url.unwrap_or_else(|| HOME_URL.to_string()));
-    let parsed: tauri::Url = url_str.parse().map_err(|e| format!("invalid URL: {e}"))?;
+    let url_str = url.map(|u| canonical_fed_url(&u)).unwrap_or_default();
+    let parsed: Option<tauri::Url> = if url_str.is_empty() {
+        None
+    } else {
+        Some(url_str.parse().map_err(|e| format!("invalid URL: {e}"))?)
+    };
+    let is_new_tab = parsed.is_none();
     let window = app
         .get_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
@@ -108,7 +121,7 @@ pub fn create_tab_sync(
             id,
             TabMeta {
                 url: url_str.clone(),
-                loading: true,
+                loading: !is_new_tab,
                 ..Default::default()
             },
         );
@@ -124,37 +137,54 @@ pub fn create_tab_sync(
     // The webview starts at about:blank and only navigates after the custom
     // user agent is applied — WKWebView races the first navigation otherwise,
     // and the first site would see the bare default UA (=> legacy pages).
-    let blank: tauri::Url = "about:blank".parse().unwrap();
+    let initial_url = if is_new_tab {
+        WebviewUrl::App(NEW_TAB_PAGE.into())
+    } else {
+        WebviewUrl::External("about:blank".parse().unwrap())
+    };
     #[allow(unused_mut)]
-    let mut builder = WebviewBuilder::new(label, WebviewUrl::External(blank))
+    let mut builder = WebviewBuilder::new(label, initial_url)
         .initialization_script(crate::ua::init_script())
         .use_https_scheme(true)
         .on_navigation(move |url| {
-            if url.as_str() != "about:blank" {
-                meta_update(
-                    &nav_app,
-                    id,
-                    Some(url.to_string()),
-                    None,
-                    None,
-                    Some(true),
-                );
+            let raw = url.as_str();
+            if is_internal_new_tab_url(raw) {
+                meta_update(&nav_app, id, Some(String::new()), None, None, Some(false));
+            } else {
+                let current = canonical_fed_url(raw);
+                meta_update(&nav_app, id, Some(current.clone()), None, None, Some(true));
+                schedule_loading_fallback(&nav_app, id, current);
             }
             true
         })
-        .on_page_load(move |_, payload| {
-            if payload.url().as_str() == "about:blank" {
+        .on_page_load(move |webview, payload| {
+            let raw = payload.url().as_str();
+            if is_internal_new_tab_url(raw) {
+                meta_update(
+                    &load_app,
+                    id,
+                    Some(String::new()),
+                    None,
+                    None,
+                    Some(false),
+                );
+                update_navigation_state(&load_app, id, &webview);
                 return;
             }
             let done = matches!(payload.event(), PageLoadEvent::Finished);
+            let current = canonical_fed_url(raw);
             meta_update(
                 &load_app,
                 id,
-                Some(payload.url().to_string()),
+                Some(current.clone()),
                 None,
                 None,
                 Some(!done),
             );
+            if !done {
+                schedule_loading_fallback(&load_app, id, current);
+            }
+            update_navigation_state(&load_app, id, &webview);
         })
         .on_document_title_changed(move |_, title| {
             meta_update(&title_app, id, None, Some(title), None, None);
@@ -186,7 +216,11 @@ pub fn create_tab_sync(
     apply_user_agent(&webview);
     #[cfg(target_os = "macos")]
     macos_container::wrap(&webview);
-    webview.navigate(parsed).map_err(|e| e.to_string())?;
+    update_navigation_state(app, id, &webview);
+    if let Some(parsed) = parsed {
+        webview.navigate(parsed).map_err(|e| e.to_string())?;
+        schedule_loading_fallback(app, id, url_str.clone());
+    }
 
     #[derive(Clone, Serialize)]
     struct Created {
@@ -194,6 +228,7 @@ pub fn create_tab_sync(
         url: String,
         index: usize,
         active: bool,
+        loading: bool,
     }
     emit_chrome(
         app,
@@ -203,6 +238,7 @@ pub fn create_tab_sync(
             url: url_str,
             index,
             active: activate,
+            loading: !is_new_tab,
         },
     );
 
@@ -270,12 +306,19 @@ pub fn close_tab_sync(app: &AppHandle, id: TabId) -> Result<(), String> {
             return Ok(()); // already gone; closing twice is not an error
         };
         if tabs.order.len() == 1 {
-            // The last tab never closes — it goes home instead, so the window
-            // always has a live page.
+            // The last tab never leaves the browser empty. Replace it with a
+            // fresh local new-tab page instead of bouncing the user to fed://.
+            tabs.order.remove(pos);
+            tabs.meta.remove(&id);
+            tabs.active = None;
             drop(tabs);
             if let Some(w) = app.get_webview(&label_of(id)) {
-                w.navigate(HOME_URL.parse().unwrap()).ok();
+                #[cfg(target_os = "macos")]
+                macos_container::remove(&w);
+                w.close().ok();
             }
+            emit_chrome(app, "fedsurf://tab-closed", id);
+            create_tab_sync(app, None, true)?;
             return Ok(());
         }
         tabs.order.remove(pos);
@@ -342,11 +385,16 @@ pub fn meta_update(
             return;
         };
         if let Some(url) = url {
-            let url = canonical_fed_url(&url);
+            let url = if is_internal_new_tab_url(&url) {
+                String::new()
+            } else {
+                canonical_fed_url(&url)
+            };
             if url != meta.url {
                 // Real navigation: the old page's title/favicon are stale.
                 if !url.split('#').next().eq(&meta.url.split('#').next()) {
                     meta.title.clear();
+                    meta.favicon.clear();
                 }
                 meta.url = url;
             }
@@ -372,6 +420,97 @@ pub fn meta_update(
         sync_window_title(app);
     }
     emit_chrome(app, "fedsurf://tab-updated", info);
+}
+
+#[cfg(target_os = "macos")]
+fn update_navigation_state(app: &AppHandle, id: TabId, webview: &tauri::Webview) {
+    let Some((can_back, can_forward)) = macos_nav_state(webview) else {
+        return;
+    };
+    nav_state_update(app, id, can_back, can_forward);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn update_navigation_state(_app: &AppHandle, _id: TabId, _webview: &tauri::Webview) {}
+
+#[cfg(target_os = "macos")]
+fn macos_nav_state(webview: &tauri::Webview) -> Option<(bool, bool)> {
+    use objc2::{msg_send, runtime::AnyObject};
+
+    let state = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let out = state.clone();
+    webview
+        .with_webview(move |pw| unsafe {
+            let wk = pw.inner() as *mut AnyObject;
+            let can_back: bool = msg_send![&*wk, canGoBack];
+            let can_forward: bool = msg_send![&*wk, canGoForward];
+            *out.lock().unwrap() = Some((can_back, can_forward));
+        })
+        .ok()?;
+    let nav_state = *state.lock().unwrap();
+    nav_state
+}
+
+fn nav_state_update(app: &AppHandle, id: TabId, can_back: bool, can_forward: bool) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let info = {
+        let mut tabs = state.tabs.lock().unwrap();
+        let Some(meta) = tabs.meta.get_mut(&id) else {
+            return;
+        };
+        if meta.can_back == Some(can_back) && meta.can_forward == Some(can_forward) {
+            return;
+        }
+        meta.can_back = Some(can_back);
+        meta.can_forward = Some(can_forward);
+        TabInfo {
+            id,
+            meta: meta.clone(),
+        }
+    };
+    emit_chrome(app, "fedsurf://tab-updated", info);
+}
+
+pub fn is_internal_new_tab_url(raw: &str) -> bool {
+    if raw == "about:blank" || raw.is_empty() {
+        return true;
+    }
+    let Ok(url) = raw.parse::<tauri::Url>() else {
+        return false;
+    };
+    let path = url.path().trim_start_matches('/');
+    if path != NEW_TAB_PAGE {
+        return false;
+    }
+    let host = url.host_str().unwrap_or_default();
+    matches!(url.scheme(), "tauri" | "asset")
+        || host == "tauri.localhost"
+        || host.ends_with(".tauri.localhost")
+}
+
+fn schedule_loading_fallback(app: &AppHandle, id: TabId, url: String) {
+    if url.is_empty() {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(LOADING_FALLBACK_SECS)).await;
+        let Some(state) = app.try_state::<AppState>() else {
+            return;
+        };
+        let should_clear = {
+            let tabs = state.tabs.lock().unwrap();
+            tabs.meta
+                .get(&id)
+                .map(|m| m.loading && m.url == url)
+                .unwrap_or(false)
+        };
+        if should_clear {
+            meta_update(&app, id, None, None, None, Some(false));
+        }
+    });
 }
 
 fn sync_window_title(app: &AppHandle) {
@@ -506,6 +645,19 @@ mod macos_container {
             let frame: NSRect = msg_send![&*v, frame];
             let container: *mut AnyObject = msg_send![class!(NSView), alloc];
             let container: *mut AnyObject = msg_send![container, initWithFrame: frame];
+            let _: () = msg_send![&*container, setWantsLayer: true];
+            let layer: *mut AnyObject = msg_send![&*container, layer];
+            if !layer.is_null() {
+                let color: *mut AnyObject = msg_send![
+                    class!(NSColor),
+                    colorWithSRGBRed: 0.9843137254901961f64,
+                    green: 0.9647058823529412f64,
+                    blue: 0.9411764705882353f64,
+                    alpha: 1.0f64
+                ];
+                let cg_color: *mut AnyObject = msg_send![&*color, CGColor];
+                let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
+            }
             let _: () = msg_send![&*content, addSubview: &*container];
             let _: () = msg_send![&*v, removeFromSuperview];
             let bounds: NSRect = msg_send![&*container, bounds];
@@ -640,7 +792,10 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
             Ok(())
         }
         other => {
-            if let Some(n) = other.strip_prefix("tab-").and_then(|s| s.parse::<usize>().ok()) {
+            if let Some(n) = other
+                .strip_prefix("tab-")
+                .and_then(|s| s.parse::<usize>().ok())
+            {
                 jump_to_index(app, n)
             } else {
                 Ok(()) // predefined menu items (copy/paste/quit/...) land here

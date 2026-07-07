@@ -18,6 +18,8 @@ struct IpcMsg {
     #[serde(default)]
     favicon: Option<String>,
     #[serde(default)]
+    loaded: Option<bool>,
+    #[serde(default)]
     action: Option<String>,
 }
 
@@ -38,7 +40,7 @@ pub fn handle(app: &AppHandle, label: &str, body: &[u8]) {
             msg.url,
             None,
             Some(msg.favicon.unwrap_or_default()),
-            None,
+            msg.loaded.map(|loaded| !loaded),
         ),
         "shortcut" => {
             if let Some(action) = msg.action {

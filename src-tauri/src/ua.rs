@@ -26,7 +26,8 @@ const IS_MAC: &str = "false";
 
 /// Injected into every page a tab loads (any scheme):
 ///   1. Federate-styled scrollbar.
-///   2. Reports url + best favicon to the fedsurf-ipc scheme (incl. SPA navs).
+///   2. Reports url + best favicon/load state to the fedsurf-ipc scheme
+///      (incl. SPA navs).
 ///   3. Captures browser shortcuts that pages would otherwise swallow.
 pub fn init_script() -> String {
     TEMPLATE
@@ -93,14 +94,16 @@ const TEMPLATE: &str = r##"
   }
   var last = '';
   function report() {
-    var msg = { kind: 'meta', url: location.href, favicon: favicon() };
-    var key = msg.url + '|' + msg.favicon;
+    var loaded = document.readyState === 'complete';
+    var msg = { kind: 'meta', url: location.href, favicon: favicon(), loaded: loaded };
+    var key = msg.url + '|' + msg.favicon + '|' + loaded;
     if (key === last) return;
     last = key;
     send(msg);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', report);
   else report();
+  document.addEventListener('readystatechange', report);
   window.addEventListener('load', function () { setTimeout(report, 50); });
   ['pushState', 'replaceState'].forEach(function (m) {
     var orig = history[m];

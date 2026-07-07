@@ -41,7 +41,7 @@ Federate crates are consumed as path dependencies from a sibling checkout: `../f
 | | |
 |---|---|
 | New tab | ⌘/Ctrl+T |
-| Close tab (last tab goes home instead) | ⌘/Ctrl+W |
+| Close tab (last tab opens a local new tab) | ⌘/Ctrl+W |
 | Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab |
 | Jump to tab 1–8, last tab | ⌘/Ctrl+1–8, ⌘/Ctrl+9 |
 | Focus address bar | ⌘/Ctrl+L |

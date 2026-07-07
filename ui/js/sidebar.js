@@ -3,7 +3,6 @@
 // roving-tabindex keyboard nav, collapse toggle.
 
 import { state, notify, hostOf } from './store.js';
-import { attach as attachTooltip, hide as hideTooltip } from './tooltip.js';
 import { initReorder, clickWasDrag } from './reorder.js';
 
 const { invoke } = window.__TAURI__.core;
@@ -14,19 +13,22 @@ const nodes = new Map(); // id -> row element
 
 const EXPANDED_PX = 240;
 const COLLAPSED_PX = 52;
+const SIDEBAR_ANIM_MS = 190;
 const TILE_COLORS = ['var(--teal)', 'var(--navy)', 'var(--olive)', 'var(--terracotta)', 'var(--amber)'];
 const CLOSE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></svg>';
 
 let lastActiveId = null;
+let sidebarAnim = 0;
 
 /* ---- helpers ------------------------------------------------------------ */
 
 function tileFor(url) {
   const host = hostOf(url);
+  if (!host) return { letter: '+', color: 'var(--accent)' };
   let hash = 0;
   for (let i = 0; i < host.length; i++) hash = (hash * 31 + host.charCodeAt(i)) >>> 0;
-  return { letter: (host || '?')[0], color: TILE_COLORS[hash % TILE_COLORS.length] };
+  return { letter: host[0], color: TILE_COLORS[hash % TILE_COLORS.length] };
 }
 
 function titleFor(tab) {
@@ -99,13 +101,7 @@ function createNode(tab) {
     if (e.button === 1) invoke('close_tab', { id: tab.id });
   });
   close.addEventListener('click', () => {
-    hideTooltip();
     invoke('close_tab', { id: tab.id });
-  });
-
-  attachTooltip(row, () => {
-    const t = state.tabs.find((x) => x.id === tab.id);
-    return t ? { title: titleFor(t).text, url: t.url } : { title: '', url: '' };
   });
 
   return row;
@@ -145,6 +141,7 @@ function updateNode(row, tab) {
   row.setAttribute('aria-selected', String(selected));
   row.tabIndex = selected ? 0 : -1;
   row.setAttribute('aria-label', text);
+  row.title = state.collapsed ? (tab.url ? `${text}\n${tab.url}` : text) : '';
   row.querySelector('.tab-close').setAttribute('aria-label', `Close ${text}`);
 
   syncIconMode(row);
@@ -197,35 +194,58 @@ function updateFade() {
 /* ---- collapse toggle ------------------------------------------------------ */
 
 export function toggleCollapsed() {
+  const sidebarEl = document.getElementById('sidebar');
+  const fromPx = parseFloat(getComputedStyle(sidebarEl).width) || sidebarPx();
+  const root = document.documentElement;
+  cancelAnimationFrame(sidebarAnim);
+  root.classList.add('sidebar-resizing');
+  root.style.setProperty('--sidebar-w', `${fromPx.toFixed(2)}px`);
+
   state.collapsed = !state.collapsed;
-  document.documentElement.classList.toggle('collapsed', state.collapsed);
+  root.classList.toggle('collapsed', state.collapsed);
   localStorage.setItem('fedsurf.sidebar.collapsed', state.collapsed ? '1' : '0');
   toggleBtn.setAttribute('aria-expanded', String(!state.collapsed));
   const label = state.collapsed ? 'Expand sidebar' : 'Collapse sidebar';
   toggleBtn.setAttribute('aria-label', label);
   toggleBtn.title = label;
-  hideTooltip();
   const px = state.collapsed ? COLLAPSED_PX : EXPANDED_PX;
-  if (state.collapsed) {
-    // Collapsing: the native content webview sits ABOVE the chrome layer, so
-    // growing it immediately would cover the rail's width animation and read
-    // as a glitchy snap. Let the animation land, then claim the space.
-    const sidebarEl = document.getElementById('sidebar');
-    let fired = false;
-    const fire = () => {
-      if (fired) return;
-      fired = true;
-      sidebarEl.removeEventListener('transitionend', onEnd);
-      if (state.collapsed) invoke('set_sidebar_width', { px: COLLAPSED_PX });
-    };
-    const onEnd = (e) => { if (e.propertyName === 'width') fire(); };
-    sidebarEl.addEventListener('transitionend', onEnd);
-    setTimeout(fire, 260);
-  } else {
-    // Expanding: shrink the native webview first; the sidebar animates into
-    // the vacated chrome background.
-    invoke('set_sidebar_width', { px });
+  animateSidebarWidth(fromPx, px);
+  notify();
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function animateSidebarWidth(fromPx, toPx) {
+  const root = document.documentElement;
+  if (prefersReducedMotion() || Math.abs(fromPx - toPx) < 1) {
+    root.classList.remove('sidebar-resizing');
+    root.style.removeProperty('--sidebar-w');
+    invoke('set_sidebar_width', { px: toPx });
+    return;
   }
+
+  const start = performance.now();
+  invoke('set_sidebar_width', { px: toPx });
+
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / SIDEBAR_ANIM_MS);
+    const px = fromPx + (toPx - fromPx) * easeOutCubic(t);
+    root.style.setProperty('--sidebar-w', `${px.toFixed(2)}px`);
+    if (t < 1) {
+      sidebarAnim = requestAnimationFrame(step);
+    } else {
+      root.classList.remove('sidebar-resizing');
+      root.style.removeProperty('--sidebar-w');
+    }
+  };
+
+  sidebarAnim = requestAnimationFrame(step);
 }
 
 export async function newTab() {
