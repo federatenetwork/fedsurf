@@ -66,6 +66,8 @@ pub fn install(app: &App) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(handle)?,
             &item("toggle-sidebar", "Toggle Sidebar", "CmdOrCtrl+B")?,
             &item("focus-address", "Open Location", "CmdOrCtrl+L")?,
+            &PredefinedMenuItem::separator(handle)?,
+            &item("devtools", "Open Web Inspector", "CmdOrCtrl+Alt+I")?,
         ],
     )?;
 

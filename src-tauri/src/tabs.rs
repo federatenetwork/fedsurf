@@ -184,6 +184,8 @@ pub fn create_tab_sync(
         e.to_string()
     })?;
     apply_user_agent(&webview);
+    #[cfg(target_os = "macos")]
+    macos_container::wrap(&webview);
     webview.navigate(parsed).map_err(|e| e.to_string())?;
 
     #[derive(Clone, Serialize)]
@@ -207,7 +209,7 @@ pub fn create_tab_sync(
     if activate {
         activate_tab_sync(app, id)?;
     } else {
-        webview.hide().ok();
+        set_tab_hidden(&webview, true);
     }
     Ok(id)
 }
@@ -248,11 +250,11 @@ pub fn activate_tab_sync(app: &AppHandle, id: TabId) -> Result<(), String> {
     };
     if let Some(prev_id) = prev.filter(|p| *p != id) {
         if let Some(w) = app.get_webview(&label_of(prev_id)) {
-            w.hide().ok();
+            set_tab_hidden(&w, true);
         }
     }
     if let Some(w) = app.get_webview(&label_of(id)) {
-        w.show().ok();
+        set_tab_hidden(&w, false);
         w.set_focus().ok();
     }
     sync_window_title(app);
@@ -287,6 +289,8 @@ pub fn close_tab_sync(app: &AppHandle, id: TabId) -> Result<(), String> {
         }
     };
     if let Some(w) = app.get_webview(&label_of(id)) {
+        #[cfg(target_os = "macos")]
+        macos_container::remove(&w);
         w.close().ok();
     }
     emit_chrome(app, "fedsurf://tab-closed", id);
@@ -459,9 +463,139 @@ pub fn layout_all(window: &tauri::Window) {
     let (pos, size) = content_rect(window, sidebar_px);
     for webview in window.webviews() {
         if webview.label().starts_with("tab-") {
-            webview.set_position(pos).ok();
-            webview.set_size(size).ok();
+            // On macOS the webview lives inside a container view (see
+            // macos_container) — position that instead; tauri's own
+            // set_position would misplace the webview within it.
+            #[cfg(target_os = "macos")]
+            macos_container::set_frame(&webview, pos.x, pos.y, size.width, size.height);
+            #[cfg(not(target_os = "macos"))]
+            {
+                webview.set_position(pos).ok();
+                webview.set_size(size).ok();
+            }
         }
+    }
+}
+
+/// macOS: every tab's WKWebView lives inside its own container NSView sized
+/// to the content area. WebKit's attached Web Inspector lays itself out
+/// relative to the inspected webview's superview — when that superview is the
+/// whole window contentView the inspector hijacks the window (covers the
+/// toolbar/sidebar); inside a per-tab container it docks within the content
+/// area like it should.
+#[cfg(target_os = "macos")]
+mod macos_container {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+    /// Move a freshly created tab webview out of the window contentView and
+    /// into a container NSView occupying the same frame.
+    pub fn wrap(webview: &tauri::Webview) {
+        let _ = webview.with_webview(|pw| unsafe {
+            let v = pw.inner() as *mut AnyObject;
+            let parent: *mut AnyObject = msg_send![&*v, superview];
+            if parent.is_null() {
+                return;
+            }
+            let window: *mut AnyObject = msg_send![&*v, window];
+            let content: *mut AnyObject = msg_send![&*window, contentView];
+            if parent != content {
+                return; // already wrapped
+            }
+            let frame: NSRect = msg_send![&*v, frame];
+            let container: *mut AnyObject = msg_send![class!(NSView), alloc];
+            let container: *mut AnyObject = msg_send![container, initWithFrame: frame];
+            let _: () = msg_send![&*content, addSubview: &*container];
+            let _: () = msg_send![&*v, removeFromSuperview];
+            let bounds: NSRect = msg_send![&*container, bounds];
+            let _: () = msg_send![&*v, setFrame: bounds];
+            // width + height sizable so the webview tracks the container
+            let _: () = msg_send![&*v, setAutoresizingMask: 18usize];
+            let _: () = msg_send![&*container, addSubview: &*v];
+            // superview holds the only reference we need
+            let _: () = msg_send![&*container, release];
+        });
+    }
+
+    /// Position the container in window coordinates (x/y from the top-left,
+    /// logical points).
+    pub fn set_frame(webview: &tauri::Webview, x: f64, y: f64, w: f64, h: f64) {
+        let _ = webview.with_webview(move |pw| unsafe {
+            let v = pw.inner() as *mut AnyObject;
+            let container: *mut AnyObject = msg_send![&*v, superview];
+            if container.is_null() {
+                return;
+            }
+            let window: *mut AnyObject = msg_send![&*v, window];
+            let content: *mut AnyObject = msg_send![&*window, contentView];
+            if container == content {
+                return; // not wrapped; nothing to do
+            }
+            let parent: *mut AnyObject = msg_send![&*container, superview];
+            if parent.is_null() {
+                return;
+            }
+            let flipped: bool = msg_send![&*parent, isFlipped];
+            let pb: NSRect = msg_send![&*parent, bounds];
+            let oy = if flipped { y } else { pb.size.height - y - h };
+            let frame = NSRect::new(NSPoint::new(x, oy), NSSize::new(w, h));
+            let current: NSRect = msg_send![&*container, frame];
+            if (current.origin.x - frame.origin.x).abs() < 0.5
+                && (current.origin.y - frame.origin.y).abs() < 0.5
+                && (current.size.width - frame.size.width).abs() < 0.5
+                && (current.size.height - frame.size.height).abs() < 0.5
+            {
+                return; // unchanged — don't force a relayout/repaint
+            }
+            let _: () = msg_send![&*container, setFrame: frame];
+        });
+    }
+
+    /// Hide/show the whole container (hiding just the webview would leave an
+    /// attached inspector of a background tab on screen).
+    pub fn set_hidden(webview: &tauri::Webview, hidden: bool) {
+        let _ = webview.with_webview(move |pw| unsafe {
+            let v = pw.inner() as *mut AnyObject;
+            let container: *mut AnyObject = msg_send![&*v, superview];
+            if container.is_null() {
+                return;
+            }
+            let window: *mut AnyObject = msg_send![&*v, window];
+            let content: *mut AnyObject = msg_send![&*window, contentView];
+            if container == content {
+                return;
+            }
+            let _: () = msg_send![&*container, setHidden: hidden];
+        });
+    }
+
+    /// Remove the container from the view hierarchy (tab closing). An empty
+    /// NSView left behind would still hit-test and eat clicks.
+    pub fn remove(webview: &tauri::Webview) {
+        let _ = webview.with_webview(|pw| unsafe {
+            let v = pw.inner() as *mut AnyObject;
+            let container: *mut AnyObject = msg_send![&*v, superview];
+            if container.is_null() {
+                return;
+            }
+            let window: *mut AnyObject = msg_send![&*v, window];
+            let content: *mut AnyObject = msg_send![&*window, contentView];
+            if container == content {
+                return;
+            }
+            let _: () = msg_send![&*container, removeFromSuperview];
+        });
+    }
+}
+
+fn set_tab_hidden(webview: &tauri::Webview, hidden: bool) {
+    #[cfg(target_os = "macos")]
+    macos_container::set_hidden(webview, hidden);
+    if hidden {
+        webview.hide().ok();
+    } else {
+        webview.show().ok();
     }
 }
 
@@ -492,6 +626,16 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
         "reload" => {
             if let Some(w) = active_label(app).and_then(|l| app.get_webview(&l)) {
                 w.reload().ok();
+            }
+            Ok(())
+        }
+        "devtools" => {
+            if let Some(w) = active_label(app).and_then(|l| app.get_webview(&l)) {
+                if w.is_devtools_open() {
+                    w.close_devtools();
+                } else {
+                    w.open_devtools();
+                }
             }
             Ok(())
         }
