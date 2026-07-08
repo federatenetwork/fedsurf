@@ -8,7 +8,7 @@ use crate::AppState;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::time::Duration;
-use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
+use tauri::webview::{Color, NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
 pub const TOPBAR_HEIGHT: f64 = 52.0;
@@ -17,6 +17,7 @@ pub const SEARCH_URL: &str = "fed://fed.busca";
 const DEFAULT_SIDEBAR_PX: f64 = 240.0;
 const NEW_TAB_PAGE: &str = "new-tab.html";
 const LOADING_FALLBACK_SECS: u64 = 12;
+pub const SURFACE_COLOR: Color = Color(251, 246, 240, 255);
 
 pub type TabId = u32;
 
@@ -116,7 +117,7 @@ pub fn create_tab_sync(
         let mut tabs = state.tabs.lock().unwrap();
         let id = tabs.next_id;
         tabs.next_id += 1;
-        tabs.order.push(id);
+        tabs.order.insert(0, id);
         tabs.meta.insert(
             id,
             TabMeta {
@@ -125,7 +126,7 @@ pub fn create_tab_sync(
                 ..Default::default()
             },
         );
-        (id, tabs.order.len() - 1, tabs.sidebar_px)
+        (id, 0, tabs.sidebar_px)
     };
 
     let label = label_of(id);
@@ -144,6 +145,7 @@ pub fn create_tab_sync(
     };
     #[allow(unused_mut)]
     let mut builder = WebviewBuilder::new(label, initial_url)
+        .background_color(SURFACE_COLOR)
         .initialization_script(crate::ua::init_script())
         .use_https_scheme(true)
         .on_navigation(move |url| {
@@ -160,14 +162,7 @@ pub fn create_tab_sync(
         .on_page_load(move |webview, payload| {
             let raw = payload.url().as_str();
             if is_internal_new_tab_url(raw) {
-                meta_update(
-                    &load_app,
-                    id,
-                    Some(String::new()),
-                    None,
-                    None,
-                    Some(false),
-                );
+                meta_update(&load_app, id, Some(String::new()), None, None, Some(false));
                 update_navigation_state(&load_app, id, &webview);
                 return;
             }
@@ -205,17 +200,21 @@ pub fn create_tab_sync(
     }
 
     let (pos, size) = content_rect(&window, sidebar_px);
-    let webview = window.add_child(builder, pos, size).map_err(|e| {
-        // Roll the phantom tab back out of the state so the sidebar never
-        // shows a tab that has no webview behind it.
-        let mut tabs = state.tabs.lock().unwrap();
-        tabs.order.retain(|t| *t != id);
-        tabs.meta.remove(&id);
-        e.to_string()
-    })?;
+    let webview = window
+        .add_child(builder, pos, LogicalSize::new(0.0, 0.0))
+        .map_err(|e| {
+            // Roll the phantom tab back out of the state so the sidebar never
+            // shows a tab that has no webview behind it.
+            let mut tabs = state.tabs.lock().unwrap();
+            tabs.order.retain(|t| *t != id);
+            tabs.meta.remove(&id);
+            e.to_string()
+        })?;
     apply_user_agent(&webview);
     #[cfg(target_os = "macos")]
     macos_container::wrap(&webview);
+    set_tab_hidden(&webview, true);
+    layout_webview(&webview, pos, size);
     update_navigation_state(app, id, &webview);
     if let Some(parsed) = parsed {
         webview.navigate(parsed).map_err(|e| e.to_string())?;
@@ -255,6 +254,7 @@ pub fn create_tab_sync(
 /// legacy pages. Set `WKWebView.customUserAgent` directly instead.
 #[cfg(target_os = "macos")]
 fn apply_user_agent(webview: &tauri::Webview) {
+    webview.set_background_color(Some(SURFACE_COLOR)).ok();
     let ua = crate::ua::USER_AGENT;
     let label = webview.label().to_string();
     let result = webview.with_webview(move |pw| {
@@ -268,6 +268,17 @@ fn apply_user_agent(webview: &tauri::Webview) {
     if let Err(e) = result {
         tracing::warn!("with_webview failed: {e}");
     }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn cream_ns_color() -> *mut objc2::runtime::AnyObject {
+    objc2::msg_send![
+        objc2::class!(NSColor),
+        colorWithSRGBRed: 0.9843137254901961f64,
+        green: 0.9647058823529412f64,
+        blue: 0.9411764705882353f64,
+        alpha: 1.0f64
+    ]
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -290,6 +301,9 @@ pub fn activate_tab_sync(app: &AppHandle, id: TabId) -> Result<(), String> {
         }
     }
     if let Some(w) = app.get_webview(&label_of(id)) {
+        if let Some(window) = app.get_window("main") {
+            layout_one(&window, &w);
+        }
         set_tab_hidden(&w, false);
         w.set_focus().ok();
     }
@@ -356,12 +370,14 @@ pub fn move_tab_sync(app: &AppHandle, id: TabId, to_index: usize) -> Result<(), 
 }
 
 pub fn set_sidebar_width_sync(app: &AppHandle, px: f64) {
-    {
+    let active = {
         let state = app.state::<AppState>();
-        state.tabs.lock().unwrap().sidebar_px = px.max(0.0);
-    }
+        let mut tabs = state.tabs.lock().unwrap();
+        tabs.sidebar_px = px.max(0.0);
+        tabs.active
+    };
     if let Some(window) = app.get_window("main") {
-        layout_all(&window);
+        layout_active(&window, active);
     }
 }
 
@@ -602,17 +618,37 @@ pub fn layout_all(window: &tauri::Window) {
     let (pos, size) = content_rect(window, sidebar_px);
     for webview in window.webviews() {
         if webview.label().starts_with("tab-") {
-            // On macOS the webview lives inside a container view (see
-            // macos_container) — position that instead; tauri's own
-            // set_position would misplace the webview within it.
-            #[cfg(target_os = "macos")]
-            macos_container::set_frame(&webview, pos.x, pos.y, size.width, size.height);
-            #[cfg(not(target_os = "macos"))]
-            {
-                webview.set_position(pos).ok();
-                webview.set_size(size).ok();
-            }
+            layout_webview(&webview, pos, size);
         }
+    }
+}
+
+fn layout_active(window: &tauri::Window, active: Option<TabId>) {
+    let Some(id) = active else {
+        return;
+    };
+    if let Some(webview) = window.get_webview(&label_of(id)) {
+        layout_one(window, &webview);
+    }
+}
+
+fn layout_one(window: &tauri::Window, webview: &tauri::Webview) {
+    let state = window.state::<AppState>();
+    let sidebar_px = state.tabs.lock().unwrap().sidebar_px;
+    let (pos, size) = content_rect(window, sidebar_px);
+    layout_webview(webview, pos, size);
+}
+
+fn layout_webview(webview: &tauri::Webview, pos: LogicalPosition<f64>, size: LogicalSize<f64>) {
+    // On macOS the webview lives inside a container view (see
+    // macos_container) — position that instead; tauri's own set_position
+    // would misplace the webview within it.
+    #[cfg(target_os = "macos")]
+    macos_container::set_frame(webview, pos.x, pos.y, size.width, size.height);
+    #[cfg(not(target_os = "macos"))]
+    {
+        webview.set_position(pos).ok();
+        webview.set_size(size).ok();
     }
 }
 
@@ -624,6 +660,7 @@ pub fn layout_all(window: &tauri::Window) {
 /// area like it should.
 #[cfg(target_os = "macos")]
 mod macos_container {
+    use super::cream_ns_color;
     use objc2::runtime::AnyObject;
     use objc2::{class, msg_send};
     use objc2_foundation::{NSPoint, NSRect, NSSize};
@@ -648,13 +685,7 @@ mod macos_container {
             let _: () = msg_send![&*container, setWantsLayer: true];
             let layer: *mut AnyObject = msg_send![&*container, layer];
             if !layer.is_null() {
-                let color: *mut AnyObject = msg_send![
-                    class!(NSColor),
-                    colorWithSRGBRed: 0.9843137254901961f64,
-                    green: 0.9647058823529412f64,
-                    blue: 0.9411764705882353f64,
-                    alpha: 1.0f64
-                ];
+                let color = cream_ns_color();
                 let cg_color: *mut AnyObject = msg_send![&*color, CGColor];
                 let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
             }

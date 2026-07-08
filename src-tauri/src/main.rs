@@ -109,7 +109,8 @@ fn main() {
             let mut builder = WindowBuilder::new(app, "main")
                 .title("Fedsurf")
                 .inner_size(START_WIDTH, START_HEIGHT)
-                .min_inner_size(480.0, 320.0);
+                .min_inner_size(480.0, 320.0)
+                .background_color(tabs::SURFACE_COLOR);
             #[cfg(target_os = "macos")]
             {
                 // Traffic lights float over the toolbar; the toolbar owns the
@@ -123,7 +124,8 @@ fn main() {
             // Chrome fills the window (topbar + sidebar + background); tab
             // webviews are stacked over its content area, added later.
             let chrome =
-                tauri::webview::WebviewBuilder::new("chrome", WebviewUrl::App("index.html".into()));
+                tauri::webview::WebviewBuilder::new("chrome", WebviewUrl::App("index.html".into()))
+                    .background_color(tabs::SURFACE_COLOR);
             window.add_child(
                 chrome,
                 LogicalPosition::new(0.0, 0.0),

@@ -45,14 +45,14 @@ const TEMPLATE: &str = r##"
     '::-webkit-scrollbar { width: 12px; height: 12px; }',
     '::-webkit-scrollbar-track { background: transparent; }',
     '::-webkit-scrollbar-thumb {',
-    '  background: rgba(174, 122, 72, 0.55);',
+    '  background: rgba(64, 106, 102, 0.52);',
     '  border-radius: 999px;',
     '  border: 3px solid transparent;',
     '  background-clip: padding-box;',
     '  min-height: 40px;',
     '}',
-    '::-webkit-scrollbar-thumb:hover { background: rgba(174, 122, 72, 0.85); background-clip: padding-box; }',
-    '::-webkit-scrollbar-thumb:active { background: #544329; background-clip: padding-box; }',
+    '::-webkit-scrollbar-thumb:hover { background: rgba(64, 106, 102, 0.78); background-clip: padding-box; }',
+    '::-webkit-scrollbar-thumb:active { background: #406A66; background-clip: padding-box; }',
     '::-webkit-scrollbar-corner { background: transparent; }'
   ].join('\n');
   function addStyle() {

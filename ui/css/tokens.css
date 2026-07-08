@@ -43,12 +43,16 @@
   --border-subtle: var(--sand);
   --text: var(--ink);
   --text-muted: var(--umber);
-  --accent: var(--bronze);
+  --accent: var(--teal);
+  --accent-strong: color-mix(in srgb, var(--accent) 86%, var(--ink));
   --scheme-fed: var(--teal);
   --scheme-https: var(--umber);
   --scheme-http: var(--amber);
   --font-ui: 'Averia Serif Libre', Georgia, serif;
   --font-mono: 'Lilex', ui-monospace, Menlo, monospace;
+  --shadow-soft: 0 1px 2px rgba(25, 25, 26, 0.05), 0 8px 20px rgba(25, 25, 26, 0.035);
+  --shadow-raised: 0 1px 2px rgba(25, 25, 26, 0.08), 0 5px 14px rgba(25, 25, 26, 0.055);
+  --shadow-drag: 0 6px 18px rgba(25, 25, 26, 0.16);
 
   /* layout */
   --topbar-h: 52px;

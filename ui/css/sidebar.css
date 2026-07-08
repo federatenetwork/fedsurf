@@ -26,6 +26,7 @@ html.sidebar-resizing .sidebar { transition: none; }
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  cursor: pointer;
   /* The scroll container clips at its padding box; bleed into the sidebar's
      8px padding so card borders/shadows and the rail's active indicator
      (.tab::before at left:-8px) are never sliced off at the row edges. */
@@ -70,7 +71,7 @@ html.sidebar-resizing .sidebar { transition: none; }
 .tab[aria-selected="true"] {
   background: #fff;
   border-color: var(--border-subtle);
-  box-shadow: 0 1px 4px rgba(84, 67, 41, 0.07);
+  box-shadow: var(--shadow-raised);
 }
 .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
@@ -83,7 +84,7 @@ html.sidebar-resizing .sidebar { transition: none; }
 }
 .tab.dragging {
   z-index: 2;
-  box-shadow: 0 4px 14px rgba(84, 67, 41, 0.18);
+  box-shadow: var(--shadow-drag);
   transition: none;
   cursor: grabbing;
 }
@@ -132,6 +133,7 @@ html.collapsed .tab[aria-selected="true"]::before { opacity: 1; }
   width: 20px;
   height: 20px;
   transition: opacity 100ms ease-out;
+  pointer-events: none;
 }
 .tab-icon > * {
   position: absolute;
@@ -154,6 +156,20 @@ html.collapsed .tab[aria-selected="true"]::before { opacity: 1; }
   font: 700 11px/1 var(--font-ui);
   text-transform: uppercase;
 }
+.tab-icon .brand-symbol {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: none;
+  place-items: center;
+  background: var(--accent);
+  color: var(--cream);
+}
+.tab-icon .brand-symbol svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
 .tab-icon .spinner {
   width: 14px;
   height: 14px;
@@ -167,6 +183,7 @@ html.collapsed .tab[aria-selected="true"]::before { opacity: 1; }
 
 .tab[data-icon="favicon"] .favicon { display: block; }
 .tab[data-icon="tile"] .tile { display: grid; }
+.tab[data-icon="brand"] .brand-symbol { display: grid; }
 .tab[data-icon="spinner"] .spinner { display: block; }
 
 /* ---- title -------------------------------------------------------------- */
@@ -183,6 +200,7 @@ html.collapsed .tab[aria-selected="true"]::before { opacity: 1; }
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%);
   opacity: 1;
   transition: opacity 120ms ease-out 80ms;
+  pointer-events: none;
 }
 .tab-title.faded { color: var(--text-muted); font-style: italic; }
 html.collapsed .tab-title {
@@ -209,7 +227,7 @@ html.collapsed .tab-title {
   border-radius: 5px;
   /* Solid chip so the X never floats over the (faded) title text. */
   background: #fff;
-  box-shadow: 0 0 0 1px var(--border-subtle), 0 1px 3px rgba(84, 67, 41, 0.10);
+  box-shadow: 0 0 0 1px var(--border-subtle), var(--shadow-soft);
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
@@ -225,12 +243,18 @@ html.collapsed .tab-title {
    hovering the rail never flashes X's over favicons. */
 html.collapsed .tab:hover .tab-close { opacity: 0; }
 html.collapsed.mod-down .tab:hover .tab-close,
-html.collapsed .tab .tab-close:focus-visible { opacity: 1; }
+html.collapsed .tab .tab-close:focus-visible { opacity: 1; pointer-events: auto; visibility: visible; }
 html.collapsed.mod-down .tab:hover .tab-icon { opacity: 0; }
 html.collapsed .tab-close {
   left: 50%;
   right: auto;
   translate: -50% -50%;
+  pointer-events: none;
+  visibility: hidden;
+}
+html.collapsed.mod-down .tab:hover .tab-close {
+  pointer-events: auto;
+  visibility: visible;
 }
 
 /* ---- footer (new tab + collapse toggle) ---------------------------------- */
@@ -270,6 +294,7 @@ html.collapsed .tab-close {
   display: block;
   opacity: 1;
   transition: opacity 120ms ease-out 80ms;
+  pointer-events: none;
 }
 html.collapsed .side-row .side-label {
   flex: 0 0 0px;

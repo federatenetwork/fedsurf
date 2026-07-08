@@ -7,14 +7,14 @@ html, body { height: 100%; overflow: hidden; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(174, 122, 72, 0.55);
+  background: color-mix(in srgb, var(--accent) 48%, transparent);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
   min-height: 40px;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(174, 122, 72, 0.85); background-clip: padding-box; }
-::-webkit-scrollbar-thumb:active { background: var(--umber); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 70%, transparent); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:active { background: var(--accent-strong); background-clip: padding-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
 
 body {
@@ -25,6 +25,8 @@ body {
   -webkit-user-select: none;
   cursor: default;
 }
+
+svg { pointer-events: none; }
 
 .app {
   height: 100%;
