@@ -28,7 +28,9 @@ jobs:
       matrix:
         include:
           - platform: linux
-            os: ubuntu-latest
+            # Build AppImage on an older glibc baseline than ubuntu-latest so
+            # the portable Linux artifact runs on more distributions.
+            os: ubuntu-22.04
           - platform: macos
             os: macos-latest
           - platform: windows
@@ -72,12 +74,14 @@ jobs:
             curl \
             file \
             libayatana-appindicator3-dev \
+            libfuse2 \
             librsvg2-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             patchelf \
-            wget
+            wget \
+            xdg-utils
 
       - name: Resolve automatic version
         id: version
@@ -114,7 +118,12 @@ jobs:
           NODE
 
       - name: Build Tauri app
+        if: runner.os != 'Linux'
         run: npx --yes @tauri-apps/cli@latest build
+
+      - name: Build Linux Tauri app with AppImage
+        if: runner.os == 'Linux'
+        run: npx --yes @tauri-apps/cli@latest build --bundles appimage,deb,rpm
 
       - name: Write release metadata
         shell: bash
@@ -141,5 +150,16 @@ jobs:
             src-tauri/target/release/bundle/**
             src-tauri/target/release/fedsurf
             src-tauri/target/release/fedsurf.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Linux AppImage artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: fedsurf-${{ steps.version.outputs.version }}-linux-appimage-${{ steps.version.outputs.short_sha }}
+          path: |
+            release-metadata/**
+            src-tauri/target/release/bundle/appimage/*.AppImage*
           if-no-files-found: error
           retention-days: 30
