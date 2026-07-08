@@ -1,0 +1,165 @@
+name: Release Artifacts
+
+# Builds installable Fedsurf artifacts whenever main changes.
+# The build version is generated per workflow run as <major>.<minor>.<run_number>,
+# derived from src-tauri/tauri.conf.json, so every main push gets a unique
+# artifact version without committing version bumps back to the repository.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            # Build AppImage on an older glibc baseline than ubuntu-latest so
+            # the portable Linux artifact runs on more distributions.
+            os: ubuntu-22.04
+          - platform: macos
+            os: macos-latest
+          - platform: windows
+            os: windows-latest
+
+    steps:
+      - name: Checkout Fedsurf
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Fedsurf's Cargo.toml uses ../../federatenetwork path dependencies.
+      # Clone federatenetwork/federate at that exact sibling path so CI matches
+      # the local workspace layout expected by the app crate.
+      - name: Checkout Federate crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/federatenetwork/federate.git ../federatenetwork
+          test -f ../federatenetwork/crates/federate-core/Cargo.toml
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build outputs
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Linux Tauri dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget \
+            xdg-utils
+
+      - name: Resolve automatic version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const configPath = path.join('src-tauri', 'tauri.conf.json');
+          const cargoPath = path.join('src-tauri', 'Cargo.toml');
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const base = String(config.version || '0.1.0').split('-')[0].split('+')[0];
+          const [major = '0', minor = '1'] = base.split('.');
+          const runNumber = process.env.GITHUB_RUN_NUMBER || '0';
+          const version = `${Number(major)}.${Number(minor)}.${Number(runNumber)}`;
+          const shortSha = (process.env.GITHUB_SHA || '').slice(0, 12);
+
+          config.version = version;
+          fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+          const cargo = fs.readFileSync(cargoPath, 'utf8').replace(
+            /(^version\s*=\s*")[^"]+("\s*$)/m,
+            `$1${version}$2`,
+          );
+          fs.writeFileSync(cargoPath, cargo);
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=v${version}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `short_sha=${shortSha}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `FEDSURF_RELEASE_VERSION=${version}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `FEDSURF_RELEASE_TAG=v${version}\n`);
+          NODE
+
+      - name: Build Tauri app
+        if: runner.os != 'Linux'
+        run: npx --yes @tauri-apps/cli@latest build
+
+      - name: Build Linux Tauri app with AppImage
+        if: runner.os == 'Linux'
+        run: npx --yes @tauri-apps/cli@latest build --bundles appimage,deb,rpm
+
+      - name: Write release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-metadata
+          cat > release-metadata/fedsurf-${{ matrix.platform }}.txt <<EOF
+          name=Fedsurf
+          version=${{ steps.version.outputs.version }}
+          tag=${{ steps.version.outputs.tag }}
+          commit=${{ github.sha }}
+          branch=${{ github.ref_name }}
+          run_id=${{ github.run_id }}
+          run_number=${{ github.run_number }}
+          platform=${{ matrix.platform }}
+          EOF
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: fedsurf-${{ steps.version.outputs.version }}-${{ matrix.platform }}-${{ steps.version.outputs.short_sha }}
+          path: |
+            release-metadata/**
+            src-tauri/target/release/bundle/**
+            src-tauri/target/release/fedsurf
+            src-tauri/target/release/fedsurf.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Linux AppImage artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: fedsurf-${{ steps.version.outputs.version }}-linux-appimage-${{ steps.version.outputs.short_sha }}
+          path: |
+            release-metadata/**
+            src-tauri/target/release/bundle/appimage/*.AppImage*
+          if-no-files-found: error
+          retention-days: 30
